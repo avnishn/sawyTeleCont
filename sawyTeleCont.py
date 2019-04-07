@@ -2,14 +2,9 @@
 import sys
 import copy
 import rospy
-import moveit_commander
-import moveit_msgs.msg
-import geometry_msgs.msg
+import numpy as np
 import tf
 
-from math import pi
-from std_msgs.msg import String
-from moveit_commander.conversions import pose_to_list
 # from pid_controller import PIDControllerThreePoints
 
 # ------------------------------------------------------------------------------------------------ #
@@ -18,8 +13,10 @@ from moveit_commander.conversions import pose_to_list
 # 2) `controller_name`_as_posestamped gives the location of the vive controller wrt the headset
 # 2 types of messages: 1) geometry_msgs/PoseStamped 2) sensor_msgs/Joy
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from sensor_msgs.msg import Joy
+import intera_interface
+from pid_controller import PIDControllerThreePoints
 
 # ------------------------------------------------------------------------------------------------ #
 
@@ -28,26 +25,16 @@ from sensor_msgs.msg import Joy
 class sawyerTeleoperation(object):
     def __init__(self):
         rospy.init_node('sawyerTeleoperation',anonymous=True)
+        self.r = rospy.Rate(10)
         self.position = None
         self.buttonsState = None
 
         self.initControllerListener()
         self.tfListener = tf.TransformListener()
-        self.initMoveIt()
-       
+        self.limb = intera_interface.Limb('right')
+        self.initial_pos = self.limb.endpoint_pose()
+        self.startingRobotPosition = self.limb.endpoint_pose()
         # wpose = self.group.get_current_pose().pose
-
-    def initMoveIt(self):
-        moveit_commander.roscpp_initialize(sys.argv)
-
-        self.robot = moveit_commander.RobotCommander()
-        self.scene = moveit_commander.PlanningSceneInterface()
-        self.group = moveit_commander.MoveGroupCommander("right_arm")
-
-        # self.eef_link = self.group.get_end_effector_link()
-        # print(self.robot.get_group_names())
-        # print "============ End effector: %s" % self.eef_link
-
    
     def buttonsPressedCallback(self, data):
         # print(data.axes)
@@ -60,29 +47,57 @@ class sawyerTeleoperation(object):
     def getControllerPositionWRTWorld(self):
         try:
             (trans,rot) = self.tfListener.lookupTransform('/world', '/left_controller', rospy.Time(0))
-            self.position = trans
-            self.rotation = rot
+            return trans,rot
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             pass
+    
+    @property
+    def robotPosition(self):
+        pos = self.limb.endpoint_pose()['position']
+        return np.asarray([pos.x, pos.y, pos.z])
+    
+    @property
+    def robotGripperOri(self):
+        ori = self.limb.endpoint_pose()['orientation']
+        return ori
+
 
     def run(self):
+        self.limb.move_to_neutral()
+        msg = "=========================starting========================="
+        rospy.loginfo(msg)
+        startControllerPosition = None
         while not rospy.is_shutdown():
-            # joint_goal = self.group.get_current_joint_values()
-            self.getControllerPositionWRTWorld()
-            # if((self.buttonsState) and (self.position)):
-            #     print("controller position {}, trigger enabled: {}".format(self.position, self.buttonsState[0]))
+
+            if( (self.buttonsState is not None) and not(self.buttonsState[0])):
+                startControllerPosition, _ = self.getControllerPositionWRTWorld()
 
             if( (self.buttonsState is not None) and (self.buttonsState[0])):
-                print("controller position {}, trigger enabled: {}".format(self.position, self.buttonsState[0]))
-                self.group.set_random_target()
-                # state = self.robot.get_current_state()
-                # print(state)
-                self.group.stop()
-                plan_msg = self.group.plan()
-                self.group.execute(plan_msg=plan_msg, wait=False)
-                rospy.sleep(5)
+                currentControllerPosition, _ = self.getControllerPositionWRTWorld()
                 
-            
+                # displacement = currControllerPos - startControllerPos
+                # updated position = displacement + startingRobotPos
+                # pointToMoveTo = pidcontroler(updatedPosition)
+                # get joint angles using IK solver
+                # send to robot
+
+                displacement = np.subtract(np.asarray(currentControllerPosition), np.asarray(startControllerPosition))
+                updatedPosition = np.add(displacement, self.robotPosition)
+
+
+
+                # construct message
+                pose_msg = Pose()
+                pose_msg.position = Point(updatedPosition[0], updatedPosition[1], updatedPosition[2])
+                pose_msg.orientation = self.robotGripperOri
+
+                joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
+                if joint_angles:
+                    self.limb.move_to_joint_positions(joint_angles, timeout=10)
+
+                msg = "robotPosition:{}, displacement:{}, updatedPosition:{}".format(self.robotPosition, displacement, updatedPosition)
+                rospy.loginfo(msg)
+
 
 
 
@@ -102,5 +117,16 @@ class sawyerTeleoperation(object):
 
 if __name__ == "__main__":
     st = sawyerTeleoperation()
-    r = rospy.Rate(10)
     st.run()
+
+
+# cur_ori = cur_pose['orientation']
+
+# tip_frame = "right_gripper_tip"
+# x, y, z = cur_pos[0]+0.1, cur_pos[1]
+# pose_msg = Pose()
+# pose_msg.position = Point(x, y, z)
+# pose_msg.orientation = Quaternion(cur_ori[0], cur_ori[1], cur_ori[2], cur_ori[3])
+# joint_angles = limb.ik_request(pose_msg, tip_frame)
+# if joint_angles:
+#     limb.move_to_joint_positions(joint_angles, timeout=10)
