@@ -10,7 +10,7 @@ import tf
 from math import pi
 from std_msgs.msg import String
 from moveit_commander.conversions import pose_to_list
-from pid_controller import PIDControllerThreePoints
+# from pid_controller import PIDControllerThreePoints
 
 # ------------------------------------------------------------------------------------------------ #
 # controller listens from 2 topics for each controller
@@ -34,16 +34,19 @@ class sawyerTeleoperation(object):
         self.initControllerListener()
         self.tfListener = tf.TransformListener()
         self.initMoveIt()
+       
+        # wpose = self.group.get_current_pose().pose
 
     def initMoveIt(self):
         moveit_commander.roscpp_initialize(sys.argv)
-        
+
         self.robot = moveit_commander.RobotCommander()
         self.scene = moveit_commander.PlanningSceneInterface()
         self.group = moveit_commander.MoveGroupCommander("right_arm")
 
-        self.eef_link = self.group.get_end_effector_link()
-        print "============ End effector: %s" % self.eef_link
+        # self.eef_link = self.group.get_end_effector_link()
+        # print(self.robot.get_group_names())
+        # print "============ End effector: %s" % self.eef_link
 
    
     def buttonsPressedCallback(self, data):
@@ -64,6 +67,7 @@ class sawyerTeleoperation(object):
 
     def run(self):
         while not rospy.is_shutdown():
+            # joint_goal = self.group.get_current_joint_values()
             self.getControllerPositionWRTWorld()
             # if((self.buttonsState) and (self.position)):
             #     print("controller position {}, trigger enabled: {}".format(self.position, self.buttonsState[0]))
@@ -71,6 +75,9 @@ class sawyerTeleoperation(object):
             if( (self.buttonsState is not None) and (self.buttonsState[0])):
                 print("controller position {}, trigger enabled: {}".format(self.position, self.buttonsState[0]))
                 self.group.set_random_target()
+                # state = self.robot.get_current_state()
+                # print(state)
+                self.group.stop()
                 plan_msg = self.group.plan()
                 self.group.execute(plan_msg=plan_msg, wait=False)
                 rospy.sleep(5)
@@ -95,5 +102,5 @@ class sawyerTeleoperation(object):
 
 if __name__ == "__main__":
     st = sawyerTeleoperation()
-    r = rospy.Rate(250)
+    r = rospy.Rate(10)
     st.run()
