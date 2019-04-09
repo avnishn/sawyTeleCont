@@ -20,8 +20,6 @@ from pid_controller import PIDControllerThreePoints
 
 # ------------------------------------------------------------------------------------------------ #
 
-
-
 class sawyerTeleoperation(object):
     def __init__(self):
         rospy.init_node('sawyerTeleoperation',anonymous=True)
@@ -34,8 +32,9 @@ class sawyerTeleoperation(object):
         self.limb = intera_interface.Limb('right')
         self.initial_pos = self.limb.endpoint_pose()
         self.startingRobotPosition = self.limb.endpoint_pose()
+        self.PID = PIDControllerThreePoints(kp=0.2, kd=0.6)
         # wpose = self.group.get_current_pose().pose
-   
+
     def buttonsPressedCallback(self, data):
         # print(data.axes)
         self.buttonsState = data.buttons
@@ -50,17 +49,16 @@ class sawyerTeleoperation(object):
             return trans,rot
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             pass
-    
+
     @property
     def robotPosition(self):
         pos = self.limb.endpoint_pose()['position']
         return np.asarray([pos.x, pos.y, pos.z])
-    
+
     @property
     def robotGripperOri(self):
         ori = self.limb.endpoint_pose()['orientation']
         return ori
-
 
     def run(self):
         self.limb.move_to_neutral()
@@ -74,7 +72,7 @@ class sawyerTeleoperation(object):
 
             if( (self.buttonsState is not None) and (self.buttonsState[0])):
                 currentControllerPosition, _ = self.getControllerPositionWRTWorld()
-                
+
                 # displacement = currControllerPos - startControllerPos
                 # updated position = displacement + startingRobotPos
                 # pointToMoveTo = pidcontroler(updatedPosition)
@@ -84,11 +82,11 @@ class sawyerTeleoperation(object):
                 displacement = np.subtract(np.asarray(currentControllerPosition), np.asarray(startControllerPosition))
                 updatedPosition = np.add(displacement, self.robotPosition)
 
-
+                pid_pos = self.PID.update(self.robotPosition, updatedPosition, rospy.get_time())
 
                 # construct message
                 pose_msg = Pose()
-                pose_msg.position = Point(updatedPosition[0], updatedPosition[1], updatedPosition[2])
+                pose_msg.position = Point(pid_pos[0], pid_pos[1], pid_pos[2])
                 pose_msg.orientation = self.robotGripperOri
 
                 joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
@@ -99,34 +97,6 @@ class sawyerTeleoperation(object):
                 rospy.loginfo(msg)
 
 
-
-
- # 10hz
-# while not rospy.is_shutdown():
-#    # store old sawyer position
-#    # store "goal position" initially the same as sawyer old position
-#    # if (saftey on controller engaged):
-#         # read current position, use pid controller, update old sawyer position
-#         # publish "old sawyer position"
-#         # keep sampling pid controller and updating old sawyer position till 
-#         # we reach the goal positon.
-#         # update goal position if htc controller has moved
-
-        
-#    r.sleep()
-
 if __name__ == "__main__":
     st = sawyerTeleoperation()
     st.run()
-
-
-# cur_ori = cur_pose['orientation']
-
-# tip_frame = "right_gripper_tip"
-# x, y, z = cur_pos[0]+0.1, cur_pos[1]
-# pose_msg = Pose()
-# pose_msg.position = Point(x, y, z)
-# pose_msg.orientation = Quaternion(cur_ori[0], cur_ori[1], cur_ori[2], cur_ori[3])
-# joint_angles = limb.ik_request(pose_msg, tip_frame)
-# if joint_angles:
-#     limb.move_to_joint_positions(joint_angles, timeout=10)
