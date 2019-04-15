@@ -23,7 +23,7 @@ from pid_controller import PIDControllerThreePoints
 class sawyerTeleoperation(object):
     def __init__(self):
         rospy.init_node('sawyerTeleoperation',anonymous=True)
-        self.r = rospy.Rate(10)
+        
         self.position = None
         self.buttonsState = None
 
@@ -65,6 +65,7 @@ class sawyerTeleoperation(object):
         msg = "=========================starting========================="
         rospy.loginfo(msg)
         startControllerPosition = None
+        self.r = rospy.Rate(1)
         while not rospy.is_shutdown():
 
             if( (self.buttonsState is not None) and not(self.buttonsState[0])):
@@ -78,9 +79,12 @@ class sawyerTeleoperation(object):
                 # pointToMoveTo = pidcontroler(updatedPosition)
                 # get joint angles using IK solver
                 # send to robot
-
+                
                 displacement = np.subtract(np.asarray(currentControllerPosition), np.asarray(startControllerPosition))
+                for x in displacement:
+                    x *= 0.5
                 updatedPosition = np.add(displacement, self.robotPosition)
+                startControllerPosition = currentControllerPosition
 
                 pid_pos = self.PID.update(self.robotPosition, updatedPosition, rospy.get_time())
 
@@ -91,10 +95,11 @@ class sawyerTeleoperation(object):
 
                 joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
                 if joint_angles:
-                    self.limb.move_to_joint_positions(joint_angles, timeout=10)
+                    self.limb.move_to_joint_positions(joint_angles, timeout=0.001)
 
-                msg = "robotPosition:{}, displacement:{}, updatedPosition:{}".format(self.robotPosition, displacement, updatedPosition)
+                msg = "robotPosition:{}, displacement:{}, updatedPosition:{}, pid_pos:{}".format(self.robotPosition, displacement, updatedPosition, pid_pos)
                 rospy.loginfo(msg)
+                self.r.sleep()
 
 
 if __name__ == "__main__":
