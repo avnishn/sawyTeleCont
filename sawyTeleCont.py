@@ -61,6 +61,7 @@ class sawyerTeleoperation(object):
         return ori
 
     def run(self):
+        self.limb.set_joint_position_speed(speed=0.1)
         self.limb.move_to_neutral()
         msg = "=========================starting========================="
         rospy.loginfo(msg)
