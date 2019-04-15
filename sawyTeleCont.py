@@ -30,6 +30,7 @@ class sawyerTeleoperation(object):
         self.initControllerListener()
         self.tfListener = tf.TransformListener()
         self.limb = intera_interface.Limb('right')
+        self.limb.set_joint_position_speed(speed=0.1)
         self.initial_pos = self.limb.endpoint_pose()
         self.startingRobotPosition = self.limb.endpoint_pose()
         self.PID = PIDControllerThreePoints(kp=0.2, kd=0.6)
@@ -52,8 +53,8 @@ class sawyerTeleoperation(object):
 
     @property
     def robotPosition(self):
-        pos = self.limb.endpoint_pose()['position']
-        return np.asarray([pos.x, pos.y, pos.z])
+        pos, _ = self.tfListener.lookupTransform("base", "right_gripper_tip", rospy.Time(0)) 
+        return np.array(pos)
 
     @property
     def robotGripperOri(self):
@@ -61,12 +62,11 @@ class sawyerTeleoperation(object):
         return ori
 
     def run(self):
-        self.limb.set_joint_position_speed(speed=0.1)
         self.limb.move_to_neutral()
         msg = "=========================starting========================="
         rospy.loginfo(msg)
         startControllerPosition = None
-        self.r = rospy.Rate(1)
+        self.r = rospy.Rate(0.45)
         while not rospy.is_shutdown():
 
             if( (self.buttonsState is not None) and not(self.buttonsState[0])):
@@ -83,7 +83,7 @@ class sawyerTeleoperation(object):
                 
                 displacement = np.subtract(np.asarray(currentControllerPosition), np.asarray(startControllerPosition))
                 for x in displacement:
-                    x *= 0.5
+                    x *= 1.5
                 updatedPosition = np.add(displacement, self.robotPosition)
                 startControllerPosition = currentControllerPosition
 
@@ -96,7 +96,7 @@ class sawyerTeleoperation(object):
 
                 joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
                 if joint_angles:
-                    self.limb.move_to_joint_positions(joint_angles, timeout=0.001)
+                    self.limb.move_to_joint_positions(joint_angles, timeout=2)
 
                 msg = "robotPosition:{}, displacement:{}, updatedPosition:{}, pid_pos:{}".format(self.robotPosition, displacement, updatedPosition, pid_pos)
                 rospy.loginfo(msg)
