@@ -16,7 +16,7 @@ import tf
 from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from sensor_msgs.msg import Joy
 import intera_interface
-from pid_controller import PIDControllerThreePoints
+from pid_controller import PIDControllerTorque
 
 # ------------------------------------------------------------------------------------------------ #
 
@@ -32,8 +32,8 @@ class sawyerTeleoperation(object):
         self.limb = intera_interface.Limb('right')
         self.initial_pos = self.limb.endpoint_pose()
         self.startingRobotPosition = self.limb.endpoint_pose()
-        self.PID = PIDControllerThreePoints(kp=0.2, kd=0.6)
-        # wpose = self.group.get_current_pose().pose
+        # change to torque pid controller
+        self.PD = PIDControllerTorque(kp=2, kd=20)
 
     def buttonsPressedCallback(self, data):
         # print(data.axes)
@@ -60,15 +60,18 @@ class sawyerTeleoperation(object):
         ori = self.limb.endpoint_pose()['orientation']
         return ori
 
+    def convertMsgToJointAngles(self, msg):
+        jointAngles = 
+
     def run(self):
         self.limb.set_joint_position_speed(speed=0.1)
-        self.limb.move_to_neutral()
+        self.limb.move_to_neutral(speed=0.1)
         msg = "=========================starting========================="
         rospy.loginfo(msg)
         startControllerPosition = None
         self.r = rospy.Rate(1)
         while not rospy.is_shutdown():
-
+            self.limb.exit_control_mode()
             if( (self.buttonsState is not None) and not(self.buttonsState[0])):
                 startControllerPosition, _ = self.getControllerPositionWRTWorld()
 
@@ -87,18 +90,27 @@ class sawyerTeleoperation(object):
                 updatedPosition = np.add(displacement, self.robotPosition)
                 startControllerPosition = currentControllerPosition
 
-                pid_pos = self.PID.update(self.robotPosition, updatedPosition, rospy.get_time())
+                # pid_pos = self.PID.update(self.robotPosition, updatedPosition, rospy.get_time())
 
                 # construct message
                 pose_msg = Pose()
-                pose_msg.position = Point(pid_pos[0], pid_pos[1], pid_pos[2])
+                pose_msg.position = Point(updatedPosition[0], updatedPosition[1], updatedPosition[2])
                 pose_msg.orientation = self.robotGripperOri
+                final_joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
+                initial_joint_angles = self.limb.joint_angles()
 
-                joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
-                if joint_angles:
-                    self.limb.move_to_joint_positions(joint_angles, timeout=0.001)
+                final_joint_angles = self.convertMsgToJointAngles(final_joint_angles)
+                initial_joint_angles = self.convertMsgToJointAngles(initial_joint_angles)
 
-                msg = "robotPosition:{}, displacement:{}, updatedPosition:{}, pid_pos:{}".format(self.robotPosition, displacement, updatedPosition, pid_pos)
+                torques = self.PD.update(initial_joint_angles, final_joint_angles, rospy.get_time())
+                # {'right_j6': -0.008129313418289359, 'right_j5': -0.20161485324696887, 'right_j4': 0.23198861560457232, 'right_j3': -1.2608710333774904, 'right_j2': -0.99524860
+                # 44219659, 'right_j1': -5.53091341181409, 'right_j0': -3.086437940859388e-05}
+                
+                torques = {'right_j6': torques[0], 'right_j5': torques[1], 'right_j4': torques[2], 'right_j3': torques[3], 'right_j2': torques[4], 'right_j1': torques[5], 'right_j0': torques[6]}
+                
+                self.limb.set_joint_torques(torques)
+
+                msg = "robotPosition:{}, torques:{}".format(self.robotPosition, torques)
                 rospy.loginfo(msg)
                 self.r.sleep()
 
