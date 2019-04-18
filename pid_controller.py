@@ -38,3 +38,27 @@ class PIDController:
         if(self.range_output is None):
             return output
         return np.clip(output, self.range_output[0], self.range_output[1])
+
+
+class PIDControllerTorque:
+    def __init__(self):
+        def __init__(self, kp, kd, range_output=None):
+        self.kp = kp
+        self.kd = kd
+        self.range_output = range_output
+        self.previousError = 0.0
+        self.previousTime = None
+
+    def update(self, value, target_value, time):
+        error = target_value - value
+        p = self.kp * error
+        d = 0
+        if(self.previousTime):
+            dt = time - self.previousTime
+            if dt > 0:
+                d = self.kd * (error - self.previousError) / dt
+        output = p + d
+        self.previousError = error
+        if(self.range_output is None):
+            return output
+        return np.clip(output, self.range_output[0], self.range_output[1])
