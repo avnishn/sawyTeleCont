@@ -102,7 +102,7 @@ class sawyerTeleoperation(object):
                 final_joint_angles = self.convertMsgToJointAngles(final_joint_angles)
                 initial_joint_angles = self.convertMsgToJointAngles(initial_joint_angles)
 
-                torques = self.PD.update(initial_joint_angles, final_joint_angles, rospy.get_time())
+                torques = self.PD.update(initial_joint_angles, final_joint_angles, self.convertMsgToJointAngles(self.limb.joint_velocities()))
                 # {'right_j6': -0.008129313418289359, 'right_j5': -0.20161485324696887, 'right_j4': 0.23198861560457232, 'right_j3': -1.2608710333774904, 'right_j2': -0.99524860
                 # 44219659, 'right_j1': -5.53091341181409, 'right_j0': -3.086437940859388e-05}
                 
