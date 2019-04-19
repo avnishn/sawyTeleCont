@@ -48,6 +48,7 @@ class PIDControllerTorque:
         self.range_output = range_output
         
     def update(self, value, target_value, velocity):
+        # :print(value, target_value)
         error = target_value - value
         p = self.kp * error
         d = self.kd * velocity
