@@ -61,7 +61,7 @@ class sawyerTeleoperation(object):
         return ori
 
     def convertMsgToJointAngles(self, msg):
-        jointAngles = 
+        jointAngles = np.asarray(msg["right_j6"], msg["right_j5"], msg["right_j4"], msg["right_j3"], msg["right_j2"], msg["right_j1"], msg["right_j0"])
 
     def run(self):
         self.limb.set_joint_position_speed(speed=0.1)
