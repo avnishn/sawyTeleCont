@@ -41,8 +41,8 @@ class PIDController:
 
 
 class PIDControllerTorque:
-    def __init__(self):
-        def __init__(self, kp, kd, range_output=None):
+   
+    def __init__(self, kp, kd, range_output=None):
         self.kp = kp
         self.kd = kd
         self.range_output = range_output
