@@ -4,6 +4,8 @@ import copy
 import rospy
 import numpy as np
 import tf
+import time
+import copy
 
 # from pid_controller import PIDControllerThreePoints
 
@@ -33,7 +35,7 @@ class sawyerTeleoperation(object):
         self.initial_pos = self.limb.endpoint_pose()
         self.startingRobotPosition = self.limb.endpoint_pose()
         # change to torque pid controller
-        self.PD = PIDControllerTorque(kp=3, kd=1.5)
+        self.PD = PIDControllerTorque(kp=15, kd=7)
 
     def buttonsPressedCallback(self, data):
         # print(data.axes)
@@ -66,7 +68,7 @@ class sawyerTeleoperation(object):
 
     def run(self):
         # self.limb.set_joint_position_speed(speed=0.1)
-        self.limb.move_to_neutral(speed=0.1)
+        self.limb.move_to_neutral(speed=0.2)
         msg = "=========================starting========================="
         rospy.loginfo(msg)
         startControllerPosition = None
@@ -80,9 +82,10 @@ class sawyerTeleoperation(object):
                 startControllerPosition, _ = self.getControllerPositionWRTWorld()
                 startRobotPosition = self.robotPosition
                 if(self.buttonsState[3]):
-                    self.limb.move_to_neutral(speed=0.1)
-                self.limb.exit_control_mode()
-
+                    self.limb.move_to_neutral(speed=0.2)
+                # self.limb.exit_control_mode()
+                start_time = time.time()
+                control_torque = {'right_j0': 0.0,'right_j1': 0.0,'right_j2': 0.0,'right_j3': 0.0,'right_j4': 0.0,'right_j5': 0.0, 'right_j6': 0.0}
 
 
             if( (self.buttonsState is not None) and (self.buttonsState[0])):
@@ -124,10 +127,17 @@ class sawyerTeleoperation(object):
 
                     torques = self.PD.update(initial_joint_angles, final_joint_angles, self.convertMsgToJointAngles(self.limb.joint_velocities()))
                     
-                    torques = {'right_j0': torques[0], 'right_j1': torques[1], 'right_j2': torques[2], 'right_j3': torques[3], 'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': torques[6]}
+                    torques = {'right_j0': torques[0], 'right_j1': torques[1], 'right_j2': torques[2], 'right_j3': torques[3], \
+                               'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': torques[6]}
+                    for k,v in torques.items():
+                        torques[k] = v - control_torque[k]
+
                     # torques = {'right_j0': 0.0, 'right_j1': 0.0, 'right_j2': 0.0, 'right_j3': 0.0, 'right_j4': 0.0, 'right_j5': 0.0, 'right_j6': 0.0}
-                    
-                    self.limb.set_joint_torques(torques)
+                    curr_time = time.time()
+                    if(curr_time-start_time < 0.1):
+                        control_torque = copy.deepcopy(torques)
+                    else:
+                        self.limb.set_joint_torques(torques)
 
                     msg = "robotPosition:{}, updatedPosition:{}, torques:{}".format(self.robotPosition, updatedPosition, torques)
                     rospy.loginfo(msg)
