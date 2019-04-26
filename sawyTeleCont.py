@@ -130,7 +130,10 @@ class sawyerTeleoperation(object):
                     torques = {'right_j0': torques[0], 'right_j1': torques[1], 'right_j2': torques[2], 'right_j3': torques[3], \
                                'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': torques[6]}
                     for k,v in torques.items():
+                        print(torques)
                         torques[k] = v - control_torque[k]
+                        print("updated")
+                        print(torques)
 
                     # torques = {'right_j0': 0.0, 'right_j1': 0.0, 'right_j2': 0.0, 'right_j3': 0.0, 'right_j4': 0.0, 'right_j5': 0.0, 'right_j6': 0.0}
                     curr_time = time.time()
@@ -140,7 +143,7 @@ class sawyerTeleoperation(object):
                         self.limb.set_joint_torques(torques)
 
                     msg = "robotPosition:{}, updatedPosition:{}, torques:{}".format(self.robotPosition, updatedPosition, torques)
-                    rospy.loginfo(msg)
+                    #rospy.loginfo(msg)
                 self.r.sleep()
 
 
