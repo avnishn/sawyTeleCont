@@ -54,8 +54,12 @@ class sawyerTeleoperation(object):
 
     @property
     def robotPosition(self):
-        pos = self.limb.endpoint_pose()['position']
-        return np.asarray([pos.x, pos.y, pos.z])
+        try:    
+            (trans,rot) = self.tfListener.lookupTransform('/base', '/right_gripper_tip', rospy.Time(0))
+            return np.asarray(trans)
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            pass
+        
 
     @property
     def robotGripperOri(self):
@@ -129,11 +133,6 @@ class sawyerTeleoperation(object):
                     
                     torques = {'right_j0': torques[0], 'right_j1': torques[1], 'right_j2': torques[2], 'right_j3': torques[3], \
                                'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': torques[6]}
-                    for k,v in torques.items():
-                        print(torques)
-                        torques[k] = v - control_torque[k]
-                        print("updated")
-                        print(torques)
 
                     # torques = {'right_j0': 0.0, 'right_j1': 0.0, 'right_j2': 0.0, 'right_j3': 0.0, 'right_j4': 0.0, 'right_j5': 0.0, 'right_j6': 0.0}
                     curr_time = time.time()
