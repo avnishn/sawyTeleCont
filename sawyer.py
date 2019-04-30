@@ -9,8 +9,8 @@ import numpy as np
 import rospy
 from tf import TransformListener
 
-from sawyer.ros.robots.kinematics_interfaces import StateValidity
-from sawyer.ros.robots.robot import Robot
+from .kinematics_interfaces import StateValidity
+from .robot import Robot
 
 INITIAL_JOINT_STATE = {
     'right_j0': -0.140923828125,
@@ -300,3 +300,10 @@ class Sawyer(Robot):
         pos, ori = self._tf_listener.lookupTransform(
             frame1, frame2, rospy.Time(0))
         return pos, ori
+
+    def ik(self, position, orientation, frame):
+        pose_msg = Pose()
+        pose_msg.position = Point(position[0], position[1], position[2])
+        pose_msg.orientation = pose_msg.orientation = Quaternion(orientation[0], orientation[1], orientation[2], orientation[3]) 
+        final_joint_angles = self.limb.ik_request(pose_msg, frame)
+        return final_joint_angles

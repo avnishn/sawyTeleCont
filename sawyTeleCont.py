@@ -10,7 +10,7 @@ from sensor_msgs.msg import Joy
 import intera_interface
 from pid_controller import PIDControllerTorque
 from sawyer import Sawyer
-from vive_subscriber import vive_subscriber
+from vive_subscriber import Vive_Subscriber
 # ------------------------------------------------------------------------------------------------ #
 
 class macros(enum.Enum):
@@ -22,7 +22,7 @@ class sawyerTeleoperation(object):
     def __init__(self):
         rospy.init_node('sawyerTeleoperation',anonymous=True)
 
-      
+
         self.limb = intera_interface.Limb('right')
 
         self.PD = PIDControllerTorque(kp=15, kd=7)
@@ -49,7 +49,7 @@ class sawyerTeleoperation(object):
                 if(not(self.vive.left_buttons_state[0])):
                     startControllerPosition, _ = self.vive.getControllerPositionWRTWorld(macros.LEFT_CONTROLLER)
                     startRobotPosition = np.asarray(self.sawyer.gripper_pose['position'])
-                    if(self.buttonsStateLeft[3]):
+                    if(self.vive.left_buttons_state[3]):
                         self.sawyer.move_to_neutral_position(0.2)
 
                 else:
