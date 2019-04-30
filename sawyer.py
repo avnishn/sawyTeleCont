@@ -268,7 +268,7 @@ class Sawyer(Robot):
     def _set_gripper_end_pose(self, gripper_pose_delta):
         cur_pos, cur_ori = self._get_tf_between(self._base_frame, self._tip_frame)
         new_pos = cur_pos + np.array(gripper_pose_delta)
-        
+        world
         # ik_request returns valid joint positions if exists, 
         # otherwise returns False.        
         pose_msg = Pose()
@@ -284,6 +284,9 @@ class Sawyer(Robot):
         self._limb.move_to_joint_positions(self._initial_joint_pos, timeout=60.0)
         self._gripper.close()
         rospy.sleep(1.0)
+    
+    def move_to_neutral_position(self, speed):
+        self._limb.move_to_neutral(speed=speed)
 
     def _rescale_value(self, value, cur_min, cur_max, new_range_min, new_range_max):
         rescaled_value = (((new_range_max - new_range_min) * (
