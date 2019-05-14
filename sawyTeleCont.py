@@ -27,34 +27,42 @@ class sawyerTeleoperation(object):
         rospy.init_node('sawyerTeleoperation',anonymous=True)
         
         self.position = None
-        self.buttonsState = None
+        self.left_button_state, self.right_button_state = None, None
 
         self.initControllerListener()
         self.tfListener = tf.TransformListener()
         self.limb = intera_interface.Limb('right')
+        self.gripper = intera_interface.Gripper('right')
         self.initial_pos = self.limb.endpoint_pose()
         self.startingRobotPosition = self.limb.endpoint_pose()
         # change to torque pid controller
         self.PD = PIDControllerTorque(kp=15, kd=7)
 
-    def buttonsPressedCallback(self, data):
-        # print(data.axes)
-        self.buttonsState = data.buttons
-        self.buttonAxes = data.axes
+    def buttonsPressedLeft(self, data):
+        self.left_button_state = data.buttons
+        self.left_button_axes = data.axes
+    
+    def buttonsPressedRight(self, data):
+        self.right_button_state = data.buttons
+        self.right_button_axes = data.axes
 
     def initControllerListener(self):
-        rospy.Subscriber("vive_left", Joy, self.buttonsPressedCallback)
+        rospy.Subscriber("vive_left", Joy, self.buttonsPressedLeft)
+        rospy.Subscriber("vive_right", Joy, self.buttonsPressedRight)
 
-    def getControllerPositionWRTWorld(self):
+    def getControllerPositionWRTWorld(self, controller_name="left"):
+        if controller_name == "left" : controller_name = '/left_controller'
+        elif contoller_name == "right": controller_name = '/right_controller'
+        else: raise Exception("either specify \"right\" or \"left\" for controller_name. param controller_name currently {}".format(controller_name)) 
         try:
-            (trans,rot) = self.tfListener.lookupTransform('/world', '/left_controller', rospy.Time(0))
+            (trans,rot) = self.tfListener.lookupTransform('/base', controller_name, rospy.Time(0))
             return trans,rot
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             pass
 
     @property
     def robotPosition(self):
-        try:    
+        try:
             (trans,rot) = self.tfListener.lookupTransform('/base', '/right_gripper_tip', rospy.Time(0))
             return np.asarray(trans)
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
@@ -70,8 +78,19 @@ class sawyerTeleoperation(object):
         jointAngles = np.asarray([msg["right_j0"], msg["right_j1"], msg["right_j2"], msg["right_j3"], msg["right_j4"], msg["right_j5"], msg["right_j6"]])
         return jointAngles
 
+    def gripperSM(self, gripperButton):
+        if(gripperButton):
+            if(not '''isgripping'''):
+                # if the gripper is not in the gripper state, keep applying force
+                pass
+            else:
+                # dont grip, because we're already gripping an object
+                pass
+        else:
+            # open gripper
+            pass
+
     def run(self):
-        # self.limb.set_joint_position_speed(speed=0.1)
         self.limb.move_to_neutral(speed=0.2)
         msg = "=========================starting========================="
         rospy.loginfo(msg)
@@ -79,52 +98,26 @@ class sawyerTeleoperation(object):
         self.r = rospy.Rate(500)
         initialOri = self.robotGripperOri
         displacement_coeff = 1.0
-    
         while not rospy.is_shutdown():
-            #self.limb.exit_control_mode()
-            if( (self.buttonsState is not None) and not(self.buttonsState[0])):
-                startControllerPosition, _ = self.getControllerPositionWRTWorld()
+            
+            if( (self.left_button_state is not None) and not(self.left_button_state[0])):
+                startControllerPosition, _ = self.getControllerPositionWRTWorld(controller_name="left")
                 startRobotPosition = self.robotPosition
-                if(self.buttonsState[3]):
+                if(self.left_button_state[3]):
                     self.limb.move_to_neutral(speed=0.2)
-                # self.limb.exit_control_mode()
-                start_time = time.time()
-                control_torque = {'right_j0': 0.0,'right_j1': 0.0,'right_j2': 0.0,'right_j3': 0.0,'right_j4': 0.0,'right_j5': 0.0, 'right_j6': 0.0}
 
+            if( (self.left_button_state is not None) and (self.left_button_state[0])):
+                currentControllerPosition, _ = self.getControllerPositionWRTWorld(controller_name="left")
 
-            if( (self.buttonsState is not None) and (self.buttonsState[0])):
-                currentControllerPosition, _ = self.getControllerPositionWRTWorld()
-
-                # displacement = currControllerPos - startControllerPos
-                # updated position = displacement + startingRobotPos
-                # pointToMoveTo = pidcontroler(updatedPosition)
-                # get joint angles using IK solver
-                # send to robot
-                
-                # displacement = np.asarray([0.0, 0, 0.1])
                 displacement = np.subtract(np.asarray(currentControllerPosition), np.asarray(startControllerPosition))
-
-
-                # for x in displacement:
-                #    x *= 0.5
-                # updatedPosition = np.add(displacement_coeff * displacement, self.robotPosition)
                 updatedPosition = np.add(displacement_coeff * displacement, startRobotPosition)
-
-                # startControllerPosition = currentControllerPosition
-
-                # pid_pos = self.PID.update(self.robotPosition, updatedPosition, rospy.get_time())
-
-                # construct message
                 pose_msg = Pose()
                 pose_msg.position = Point(updatedPosition[0], updatedPosition[1], updatedPosition[2])
-                pose_msg.orientation = initialOri #self.robotGripperOri
+                pose_msg.orientation = initialOri #self.robotGripperOri.
                 final_joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
                 if(type(final_joint_angles) is not bool):
 
                     initial_joint_angles = self.limb.joint_angles()
-                    # print(final_joint_angles)
-                    # print(initial_joint_angles)
-
 
                     final_joint_angles = self.convertMsgToJointAngles(final_joint_angles)
                     initial_joint_angles = self.convertMsgToJointAngles(initial_joint_angles)
@@ -134,15 +127,15 @@ class sawyerTeleoperation(object):
                     torques = {'right_j0': torques[0], 'right_j1': torques[1], 'right_j2': torques[2], 'right_j3': torques[3], \
                                'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': torques[6]}
 
-                    # torques = {'right_j0': 0.0, 'right_j1': 0.0, 'right_j2': 0.0, 'right_j3': 0.0, 'right_j4': 0.0, 'right_j5': 0.0, 'right_j6': 0.0}
-                    curr_time = time.time()
-                    if(curr_time-start_time < 0.1):
-                        control_torque = copy.deepcopy(torques)
-                    else:
-                        self.limb.set_joint_torques(torques)
+                    self.limb.set_joint_torques(torques)
 
                     msg = "robotPosition:{}, updatedPosition:{}, torques:{}".format(self.robotPosition, updatedPosition, torques)
                     #rospy.loginfo(msg)
+                
+            # gripper logic
+            if(self.right_button_state is not None):
+                self.gripperSM(self.right_button_state[3])
+                
                 self.r.sleep()
 
 
