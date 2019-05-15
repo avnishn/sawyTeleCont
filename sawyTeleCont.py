@@ -19,6 +19,7 @@ from geometry_msgs.msg import PoseStamped, Pose, Point, Quaternion
 from sensor_msgs.msg import Joy
 import intera_interface
 from pid_controller import PIDControllerTorque
+from tf.transformations import *
 
 # ------------------------------------------------------------------------------------------------ #
 
@@ -32,11 +33,8 @@ class sawyerTeleoperation(object):
         self.initControllerListener()
         self.tfListener = tf.TransformListener()
         self.limb = intera_interface.Limb('right')
-        self.gripper = intera_interface.Gripper('right')
-        self.initial_pos = self.limb.endpoint_pose()
-        self.startingRobotPosition = self.limb.endpoint_pose()
-        # change to torque pid controller
-        self.PD = PIDControllerTorque(kp=15, kd=7)
+        # self.gripper = intera_interface.Gripper('right')
+        self.PD = PIDControllerTorque(kp=15, kd=6.5)
 
     def buttonsPressedLeft(self, data):
         self.left_button_state = data.buttons
@@ -56,6 +54,7 @@ class sawyerTeleoperation(object):
         else: raise Exception("either specify \"right\" or \"left\" for controller_name. param controller_name currently {}".format(controller_name)) 
         try:
             (trans,rot) = self.tfListener.lookupTransform('/base', controller_name, rospy.Time(0))
+            # rot = Quaternion(rot[0], rot[1], rot[2], rot[3])
             return trans,rot
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
             pass
@@ -71,8 +70,12 @@ class sawyerTeleoperation(object):
 
     @property
     def robotGripperOri(self):
-        ori = self.limb.endpoint_pose()['orientation']
-        return ori
+        try:
+            (trans,rot) = self.tfListener.lookupTransform('/base', '/right_gripper_tip', rospy.Time(0))
+            return np.asarray(rot)
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            pass
+        
 
     def convertMsgToJointAngles(self, msg):
         jointAngles = np.asarray([msg["right_j0"], msg["right_j1"], msg["right_j2"], msg["right_j3"], msg["right_j4"], msg["right_j5"], msg["right_j6"]])
@@ -94,26 +97,47 @@ class sawyerTeleoperation(object):
         self.limb.move_to_neutral(speed=0.2)
         msg = "=========================starting========================="
         rospy.loginfo(msg)
-        startControllerPosition = None
+        start_cont_pos = None
         self.r = rospy.Rate(500)
-        initialOri = self.robotGripperOri
+       
         displacement_coeff = 1.0
+        held_ori = self.robotGripperOri
         while not rospy.is_shutdown():
+            #print(self.robotGripperOri)
             
             if( (self.left_button_state is not None) and not(self.left_button_state[0])):
-                startControllerPosition, _ = self.getControllerPositionWRTWorld(controller_name="left")
-                startRobotPosition = self.robotPosition
+                start_cont_pos, start_cont_ori = self.getControllerPositionWRTWorld(controller_name="left")
+                # inv_start_cont_ori = [start_cont_ori[0], start_cont_ori[1], start_cont_ori[2], -start_cont_ori[3]]
+                start_robot_pos = self.robotPosition
+                current_robot_ori = self.robotGripperOri
                 if(self.left_button_state[3]):
                     self.limb.move_to_neutral(speed=0.2)
+                    held_ori = self.robotGripperOri
+                    
 
             if( (self.left_button_state is not None) and (self.left_button_state[0])):
-                currentControllerPosition, _ = self.getControllerPositionWRTWorld(controller_name="left")
+                curr_cont_pos, curr_cont_ori  = self.getControllerPositionWRTWorld(controller_name="left")
+                # current_robot_ori = self.robotGripperOri
+                displacement = np.subtract(np.asarray(curr_cont_pos), np.asarray(start_cont_pos))
+                updatedPosition = np.add(displacement_coeff * displacement, start_robot_pos)
 
-                displacement = np.subtract(np.asarray(currentControllerPosition), np.asarray(startControllerPosition))
-                updatedPosition = np.add(displacement_coeff * displacement, startRobotPosition)
+                if(self.left_button_state[2]):
+                    inv_cont_ori = [curr_cont_ori[0], curr_cont_ori[1], curr_cont_ori[2], -curr_cont_ori[3]]
+                    # delta_orientation = tf.transformations.quaternion_multiply(curr_cont_ori, inv_start_cont_ori)
+                    delta_orientation = tf.transformations.quaternion_multiply(start_cont_ori, inv_cont_ori)
+                    #delta_orientation = tf.transformations.quaternion_multiply(inv_start_cont_ori, curr_cont_ori)
+                    #delta_orientation[3] *= -1
+                    print(delta_orientation)
+                    current_ori = tf.transformations.quaternion_multiply(current_robot_ori, delta_orientation)
+                    held_ori = current_ori
+                    current_ori = Quaternion(current_ori[0], current_ori[1], current_ori[2], current_ori[3])
+                else:
+                    temp_ori = held_ori
+                    current_ori = Quaternion(temp_ori[0], temp_ori[1], temp_ori[2], temp_ori[3])
+                
                 pose_msg = Pose()
                 pose_msg.position = Point(updatedPosition[0], updatedPosition[1], updatedPosition[2])
-                pose_msg.orientation = initialOri #self.robotGripperOri.
+                pose_msg.orientation = current_ori 
                 final_joint_angles = self.limb.ik_request(pose_msg, "right_gripper_tip")
                 if(type(final_joint_angles) is not bool):
 
@@ -125,7 +149,7 @@ class sawyerTeleoperation(object):
                     torques = self.PD.update(initial_joint_angles, final_joint_angles, self.convertMsgToJointAngles(self.limb.joint_velocities()))
                     
                     torques = {'right_j0': torques[0], 'right_j1': torques[1], 'right_j2': torques[2], 'right_j3': torques[3], \
-                               'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': torques[6]}
+                               'right_j4': torques[4], 'right_j5': torques[5], 'right_j6': 0}
 
                     self.limb.set_joint_torques(torques)
 
