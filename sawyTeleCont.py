@@ -33,7 +33,7 @@ class sawyerTeleoperation(object):
         self.initControllerListener()
         self.tfListener = tf.TransformListener()
         self.limb = intera_interface.Limb('right')
-        # self.gripper = intera_interface.Gripper('right')
+        self.gripper = intera_interface.Gripper('right')
         self.PD = PIDControllerTorque(kp=15, kd=6.5)
 
     def buttonsPressedLeft(self, data):
@@ -54,10 +54,13 @@ class sawyerTeleoperation(object):
         else: raise Exception("either specify \"right\" or \"left\" for controller_name. param controller_name currently {}".format(controller_name)) 
         try:
             (trans,rot) = self.tfListener.lookupTransform('/base', controller_name, rospy.Time(0))
+            # self.tfListener.waitForTransform('/right_gripper_tip', controller_name, rospy.Time(0), rospy.Duration(5.0))
+            # (trans2, rot2) = self.tfListener.lookupTransform(controller_name, '/right_gripper_tip', rospy.Time(0))
             # rot = Quaternion(rot[0], rot[1], rot[2], rot[3])
             return trans,rot
-        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            pass
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+            print("error retrieving transformation")
+            print(e)
 
     @property
     def robotPosition(self):
@@ -81,17 +84,12 @@ class sawyerTeleoperation(object):
         jointAngles = np.asarray([msg["right_j0"], msg["right_j1"], msg["right_j2"], msg["right_j3"], msg["right_j4"], msg["right_j5"], msg["right_j6"]])
         return jointAngles
 
-    def gripperSM(self, gripperButton):
-        if(gripperButton):
-            if(not '''isgripping'''):
-                # if the gripper is not in the gripper state, keep applying force
-                pass
-            else:
-                # dont grip, because we're already gripping an object
-                pass
+    def gripperSM(self):
+        if(self.gripper_closed):
+            self.gripper.open()
         else:
-            # open gripper
-            pass
+            self.gripper.close()
+        self.gripper_closed = not(self.gripper_closed)
 
     def run(self):
         self.limb.move_to_neutral(speed=0.2)
@@ -99,25 +97,22 @@ class sawyerTeleoperation(object):
         rospy.loginfo(msg)
         start_cont_pos = None
         self.r = rospy.Rate(500)
-       
         displacement_coeff = 1.0
         held_ori = self.robotGripperOri
-        while not rospy.is_shutdown():
-            #print(self.robotGripperOri)
-            
+        print(held_ori)
+        self.gripper_closed = False
+        while not rospy.is_shutdown():            
             if( (self.left_button_state is not None) and not(self.left_button_state[0])):
                 start_cont_pos, start_cont_ori = self.getControllerPositionWRTWorld(controller_name="left")
-                # inv_start_cont_ori = [start_cont_ori[0], start_cont_ori[1], start_cont_ori[2], -start_cont_ori[3]]
                 start_robot_pos = self.robotPosition
                 current_robot_ori = self.robotGripperOri
-                if(self.left_button_state[3]):
+                if(self.left_button_state[4]):
                     self.limb.move_to_neutral(speed=0.2)
                     held_ori = self.robotGripperOri
                     
 
             if( (self.left_button_state is not None) and (self.left_button_state[0])):
                 curr_cont_pos, curr_cont_ori  = self.getControllerPositionWRTWorld(controller_name="left")
-                # current_robot_ori = self.robotGripperOri
                 displacement = np.subtract(np.asarray(curr_cont_pos), np.asarray(start_cont_pos))
                 updatedPosition = np.add(displacement_coeff * displacement, start_robot_pos)
 
@@ -157,10 +152,9 @@ class sawyerTeleoperation(object):
                     #rospy.loginfo(msg)
                 
             # gripper logic
-            if(self.right_button_state is not None):
-                self.gripperSM(self.right_button_state[3])
-                
-                self.r.sleep()
+            if(self.left_button_state is not None and self.left_button_state[3]):
+                self.gripperSM()
+            self.r.sleep()
 
 
 if __name__ == "__main__":
