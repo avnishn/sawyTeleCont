@@ -1,8 +1,6 @@
 # sawyTeleCont
+---------------
 
-1) Get the displacement of the controller with respect to the light house 
-2) from there take that displacement and run through pd controller 
-3) publish that change to the robot using moveit?! 
+This Ros Package is useful for manipulating the Rethink Robotics arm with HTC Vive Controllers.
 
-Track current frame from the last one 
 
